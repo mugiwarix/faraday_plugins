@@ -140,6 +140,18 @@ def test_text_byte_limits(field, value):
         plugin().parseOutputString(json.dumps([{**record(), field: value}]))
 
 
+def test_startup_engine_warning_without_endpoint_is_retained_as_diagnostic():
+    parser = createPlugin(target=TARGET, port=8443, finding_ids=["TLS1"])
+    entries = [record("engine_problem", "No engine or GOST support", "WARN", ip="/", port="443"),
+               record("TLS1", "not offered", "INFO", port="8443")]
+    parser.parseOutputString(json.dumps(entries))
+    assert [item["name"] for item in findings(parser)] == ["engine_problem", "TLS1"]
+    assert parser.get_data()["hosts"][0]["services"][0]["port"] == 8443
+    for altered in ({"id": "TLS1"}, {"severity": "OK"}, {"port": "8443"}):
+        with pytest.raises(ValueError):
+            parser.parseOutputString(json.dumps([{**entries[0], **altered}]))
+
+
 def test_input_and_raw_record_limits():
     for payload in [b" " * (MAX_INPUT_BYTES + 1), "é" * (MAX_INPUT_BYTES // 2 + 1),
                     json.dumps([record("unrequested")] * (MAX_RAW_RECORDS + 1))]:

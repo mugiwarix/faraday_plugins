@@ -139,15 +139,20 @@ class TestsslPlugin(PluginJsonFormat):
             finding = _text(record["finding"], 8192)
             severity = _text(record["severity"], 32).upper()
             endpoint = _text(record["ip"], 31).split("/")
-            if len(endpoint) not in (1, 2) or any(ip != self.target for ip in endpoint):
-                raise ValueError("Foreign evidence endpoint")
             port = record["port"]
-            if type(port) is str:
-                _text(port, 5)
-                if port != str(self.port):
-                    raise ValueError("Foreign evidence port")
-            elif type(port) is not int or port != self.port:
-                raise ValueError("Invalid or foreign evidence port")
+            # testssl emits this startup diagnostic before setting its endpoint.
+            global_problem = (finding_id == "engine_problem" and endpoint == ["", ""]
+                              and severity in {"WARN", "WARNING", "ERROR", "FATAL"}
+                              and (type(port) is str and port == "443" or type(port) is int and port == 443))
+            if not global_problem:
+                if len(endpoint) not in (1, 2) or any(ip != self.target for ip in endpoint):
+                    raise ValueError("Foreign evidence endpoint")
+                if type(port) is str:
+                    _text(port, 5)
+                    if port != str(self.port):
+                        raise ValueError("Foreign evidence port")
+                elif type(port) is not int or port != self.port:
+                    raise ValueError("Invalid or foreign evidence port")
             for key in record.keys() & OPTIONAL_KEYS:
                 _text(record[key], 8192)
             # Filtering unrelated records can hide incomplete-check diagnostics.
