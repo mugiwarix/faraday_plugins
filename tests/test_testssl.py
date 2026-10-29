@@ -57,11 +57,11 @@ def test_bound_report_preserves_evidence_order_and_duplicates():
     assert len(host["services"]) == 1 and service["port"] == 443 and service["protocol"] == "tcp"
     evidence = service["vulnerabilities"]
     assert [item["name"] for item in evidence] == [
-        "service", "SSLv2", "SSLv2", "SSLv3", "engine_problem", "unexpected", "scanProblem"]
+        "service", "SSLv2", "SSLv2", "SSLv3", "TLS1_2", "engine_problem", "unexpected", "scanProblem", "scanTime"]
     assert evidence[1] == {"name": "SSLv2", "desc": raw, "data": "OK",
                            "severity": "unclassified", "type": "Vulnerability"}
     assert evidence[3]["data"] == "CRITICAL" and evidence[3]["severity"] == "critical"
-    assert parser.get_summary()["services_vulns"] == 7
+    assert parser.get_summary()["services_vulns"] == 9
     assert json.loads(parser.get_json())["hosts"] == report["hosts"]
 
 
@@ -70,8 +70,9 @@ def test_bound_report_preserves_evidence_order_and_duplicates():
     ("PROMPT", "retry"), ("SPECIAL", "retry"), ("ERROR", "retry"), ("FATAL", "retry"),
     ("INFO", "check skipped"), ("INFO", "scan incomplete"), ("OK", "error reading response"),
     ("INFO", "Warning: no result"), ("OK", "skipping this check"),
+    ("INFO", "could not test"), ("INFO", "check timed out"), ("INFO", "unfamiliar diagnostic"),
 ])
-def test_diagnostics_preserved_before_requested_id_filter(severity, text):
+def test_all_diagnostics_preserved_without_requested_id_filter(severity, text):
     ids = ["cipherlist_LOW", "cipherlist_OBSOLETED", "cipherlist_EXPORT"]
     parser = createPlugin(target=TARGET, port=443, finding_ids=ids)
     entries = [record(finding_id) for finding_id in ids]
@@ -144,9 +145,8 @@ def test_input_and_raw_record_limits():
                     json.dumps([record("unrequested")] * (MAX_RAW_RECORDS + 1))]:
         with pytest.raises(EvidenceLimit):
             plugin().parseOutputString(payload)
-    parser = plugin()
-    parser.parseOutputString(json.dumps([record("unrequested")] * MAX_RAW_RECORDS))
-    assert findings(parser) == []
+    with pytest.raises(EvidenceLimit, match="Too many evidence records"):
+        plugin().parseOutputString(json.dumps([record("unrequested")] * MAX_RAW_RECORDS))
 
 
 def test_output_record_limits_include_duplicates_service_and_errors():

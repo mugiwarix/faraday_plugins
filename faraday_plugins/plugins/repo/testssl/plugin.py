@@ -3,7 +3,6 @@
 import ipaddress
 import json
 import os
-import re
 import stat
 
 from faraday_plugins.plugins.plugin import PluginJsonFormat
@@ -14,9 +13,6 @@ MAX_RAW_RECORDS = 2048
 MAX_RECORDS = 64
 RECORD_KEYS = {"id", "ip", "port", "severity", "finding"}
 OPTIONAL_KEYS = {"cve", "cwe", "hint"}
-ERROR_IDS = {"error", "engine_problem", "scanProblem"}
-FINDING_SEVERITIES = {"OK", "INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
-DIAGNOSTIC = re.compile(r"\b(?:skip\w*|incomplete\w*|error\w*|warn\w*)\b", re.IGNORECASE)
 
 
 class EvidenceLimit(ValueError):
@@ -154,12 +150,11 @@ class TestsslPlugin(PluginJsonFormat):
                 raise ValueError("Invalid or foreign evidence port")
             for key in record.keys() & OPTIONAL_KEYS:
                 _text(record[key], 8192)
-            if (severity not in FINDING_SEVERITIES or DIAGNOSTIC.search(finding) or
-                    finding_id in ERROR_IDS or finding_id == "service" or finding_id in self.finding_ids):
-                evidence.append({"name": finding_id, "desc": finding, "data": severity,
-                                 "severity": self.normalize_severity(severity), "type": "Vulnerability"})
-                if len(evidence) > self.max_records:
-                    raise EvidenceLimit("Too many evidence records")
+            # Filtering unrelated records can hide incomplete-check diagnostics.
+            evidence.append({"name": finding_id, "desc": finding, "data": severity,
+                             "severity": self.normalize_severity(severity), "type": "Vulnerability"})
+            if len(evidence) > self.max_records:
+                raise EvidenceLimit("Too many evidence records")
         host_id = self.createAndAddHost(self.target)
         service_id = self.createAndAddServiceToHost(host_id, "ssl", ports=self.port, protocol="tcp")
         # Base vulnerability helpers deduplicate/filter records, losing evidence.
